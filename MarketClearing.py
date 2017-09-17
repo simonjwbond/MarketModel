@@ -32,28 +32,39 @@ class MarketClearing:
 
     def MaximizeSurplus(self):
 
-        threads = 1
-        logevery = 10000000
+        threads = 4
+        logevery = 10000
         combis = 2 ** len(self.BidCollection.BlockOffers)
 
         perthread = int(combis/threads)
 
-        jobs = []
-        for i in range(0,threads):
-            p = multiprocessing.Process(target=self.MaximiseSurplusProcess, args=(i*perthread,i*perthread+perthread,len(self.BidCollection.BlockOffers),i,logevery,))
+
+        if(threads > 1):
+
+            jobs = []
+            i = 0
+            for i in range(0,threads-1):
+                p = multiprocessing.Process(target=self.MaximiseSurplusProcess, args=(i*perthread,i*perthread+perthread,len(self.BidCollection.BlockOffers),i,logevery,))
+                jobs.append(p)
+                p.start()
+
+            p = multiprocessing.Process(target=self.MaximiseSurplusProcess, args=(i * perthread, combis, len(self.BidCollection.BlockOffers),i, logevery,))
             jobs.append(p)
             p.start()
 
-        p = multiprocessing.Process(target=self.MaximiseSurplusProcess, args=(i * perthread, combis, len(self.BidCollection.BlockOffers),i, logevery,))
-        jobs.append(p)
-        p.start()
+            for i in jobs:
+                i.join()
 
-        for i in jobs:
-            i.join()
+            #get the optimals from each process
+        else:
+            self.MaximiseSurplusProcess(0, combis, len(self.BidCollection.BlockOffers),0, logevery)
+
+
 
     def MaximiseSurplusProcess(self,Start,End, length, Worker, logevery):
 
         MaxSurplus = 0
+        BestOffers = 0
 
         for i in range(Start,End):
 
@@ -71,12 +82,43 @@ class MarketClearing:
             MCP = self.FindMCP(BidOfferCurve)
 
             Surplus = self.CalculateSurplus(MCP,BlocksAccepted)
+            TotSurplus = sum(Surplus)
+
+            if(TotSurplus>MaxSurplus):
+
+                MaxSurplus = TotSurplus
+                BestOffers = i
+                BestMCP = copy.deepcopy(MCP)
+
+
+
+            if(i% logevery == 0):
+                print(str(i)+ " of " + str(End) + " Worker: " + str(Worker))
+                print(str(BestOffers)  +  " - Surplus: " + str(MaxSurplus))
+                print(str(bin(BestOffers))[2:].zfill(length))
+                print(MCP)
 
     def CalculateSurplus(self,MCP,Blocks):
 
+        surplus2 = []
         # the additional consumer surplus on the left
         surplus = Blocks * MCP
-        surplus2 = list(map(sum, self.PS))
+
+        #And add each PS below
+        for h in range(0, self.Hours):
+            tmpVal = 0
+            i=0
+
+            #you should review the calculation of the surplus, the index here for for PSEnd may need to be PSStart, and also check the i index
+            while MCP[h] > self.PSEnd[h][i]:
+                i+=1
+
+            surplus[h] += self.PS[h][i-1]
+
+            #surplus2.append() = list(map(sum, self.PS))
+
+        #now for each block, the difference between the settled price and the block price, multiplied by the volume
+
 
         return surplus
 
@@ -100,6 +142,7 @@ class MarketClearing:
         self.PSStart = []
         self.PSEnd = []
         self.PSLength = []
+        self.PSMarginal = []
         self.PS = []
 
         for p in range(0, self.Hours):
@@ -107,6 +150,7 @@ class MarketClearing:
             self.PSStart.append([])
             self.PSEnd.append([])
             self.PSLength.append([])
+            self.PSMarginal.append([])
             self.PS.append([])
 
             i = self.MinPrice
@@ -119,9 +163,13 @@ class MarketClearing:
                 while (i < self.MaxPrice and self.OfferCurve[i][p] == tmpVol):
                     i += 1
 
-                self.PSEnd[p].append(i)
+                totVol = self.OfferCurve[i][p] - tmpVol
+                self.PSEnd[p].append(i-1)
                 self.PSLength[p].append(self.PSEnd[p][-1] - self.PSStart[p][-1])
-                self.PS[p].append(self.PSLength[p][-1]*tmpVol)
+                self.PSMarginal[p].append(self.PSLength[p][-1]*totVol)
+                self.PS[p].append(self.PSLength[p][-1]*totVol)
+                for j in range(0, len(self.PSMarginal[p])-1):
+                    self.PS[p][-1] += self.PSMarginal[p][j]
 
         print("Made PS Range")
 
@@ -202,6 +250,7 @@ class MarketClearing:
             return idx-1
         else:
             return idx
+
 
 class BidCollection:
     def __init__(self):
