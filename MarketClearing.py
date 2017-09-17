@@ -42,26 +42,34 @@ class MarketClearing:
         if(threads > 1):
 
             jobs = []
+            pipe_list = []
             i = 0
             for i in range(0,threads-1):
-                p = multiprocessing.Process(target=self.MaximiseSurplusProcess, args=(i*perthread,i*perthread+perthread,len(self.BidCollection.BlockOffers),i,logevery,))
+                recv_end, send_end = multiprocessing.Pipe(False)
+                p = multiprocessing.Process(target=self.MaximiseSurplusProcess, args=(i*perthread,i*perthread+perthread,len(self.BidCollection.BlockOffers),i,logevery,send_end))
                 jobs.append(p)
+                pipe_list.append(recv_end)
                 p.start()
 
-            p = multiprocessing.Process(target=self.MaximiseSurplusProcess, args=(i * perthread, combis, len(self.BidCollection.BlockOffers),i, logevery,))
+            recv_end, send_end = multiprocessing.Pipe(False)
+            p = multiprocessing.Process(target=self.MaximiseSurplusProcess, args=((i+1) * perthread, combis, len(self.BidCollection.BlockOffers),i+1, logevery,send_end))
             jobs.append(p)
+            pipe_list.append(recv_end)
             p.start()
 
             for i in jobs:
                 i.join()
 
+            result_list = [x.recv() for x in pipe_list]
+
+            print("Calculated Optimum")
             #get the optimals from each process
         else:
             self.MaximiseSurplusProcess(0, combis, len(self.BidCollection.BlockOffers),0, logevery)
 
 
 
-    def MaximiseSurplusProcess(self,Start,End, length, Worker, logevery):
+    def MaximiseSurplusProcess(self,Start,End, length, Worker, logevery, send_end):
 
         MaxSurplus = 0
         BestOffers = 0
@@ -90,13 +98,14 @@ class MarketClearing:
                 BestOffers = i
                 BestMCP = copy.deepcopy(MCP)
 
-
-
             if(i% logevery == 0):
                 print(str(i)+ " of " + str(End) + " Worker: " + str(Worker))
                 print(str(BestOffers)  +  " - Surplus: " + str(MaxSurplus))
                 print(str(bin(BestOffers))[2:].zfill(length))
                 print(MCP)
+
+        result = [i,BestMCP]
+        send_end.send(result)
 
     def CalculateSurplus(self,MCP,Blocks):
 
