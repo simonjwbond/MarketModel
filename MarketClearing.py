@@ -3,6 +3,8 @@ import pandas as pd
 import math
 import multiprocessing
 import copy
+import datetime
+import time
 
 class MarketClearing:
     def __init__(self,inHours, inMaxPrice, inMinPrice, inBucketType, inBucketSize, inBidCollection):
@@ -32,12 +34,14 @@ class MarketClearing:
 
     def MaximizeSurplus(self):
 
-        threads = 4
-        logevery = 10000
+        ts = time.time()
+        st = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')
+
+        threads = multiprocessing.cpu_count()
+        logevery = 100000
         combis = 2 ** len(self.BidCollection.BlockOffers)
 
         perthread = int(combis/threads)
-
 
         if(threads > 1):
 
@@ -62,12 +66,15 @@ class MarketClearing:
 
             result_list = [x.recv() for x in pipe_list]
 
+
             print("Calculated Optimum")
             #get the optimals from each process
         else:
             self.MaximiseSurplusProcess(0, combis, len(self.BidCollection.BlockOffers),0, logevery)
 
-
+        ts2 = time.time()
+        et = datetime.datetime.fromtimestamp(ts2-ts).strftime('%Y-%m-%d %H:%M:%S')
+        print (et)
 
     def MaximiseSurplusProcess(self,Start,End, length, Worker, logevery, send_end):
 
