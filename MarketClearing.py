@@ -38,9 +38,9 @@ class MarketClearing:
         st = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')
 
         threads = multiprocessing.cpu_count()
-        #threads = 1
+        threads = 1
 
-        logevery = 100000
+        logevery = 10000
         combis = 2 ** len(self.BidCollection.BlockOffers)
 
         perthread = int(combis/threads)
@@ -68,8 +68,19 @@ class MarketClearing:
 
             result_list = [x.recv() for x in pipe_list]
 
+            Best_Result = 0
+            Best_Index = 0
+            for i in range(0, len(result_list)):
+                if Best_Result < result_list[i][1]:
+                    Best_Result = result_list[i][1]
+                    Best_Index = i
 
+            print(" ")
             print("Calculated Optimum")
+            print("Final Optimal MCP: \n ")
+            print(result_list[Best_Index][2])
+            print("Accepted blocks: " + str(bin(result_list[Best_Index][0]))[2:].zfill(len(self.BidCollection.BlockOffers)))
+
             #get the optimals from each process
 
         else:
@@ -113,9 +124,17 @@ class MarketClearing:
                 print(str(i)+ " of " + str(End) + " Worker: " + str(Worker))
                 print(str(BestOffers)  +  " - Surplus: " + str(MaxSurplus))
                 print(str(bin(BestOffers))[2:].zfill(length))
-                print(MCP)
+                print(BestMCP)
+                print(" ")
 
-        result = [i,BestMCP]
+        print("Calculated Optimum:")
+        print(MaxSurplus)
+        print("Optimum MCP: \n ")
+        print(BestMCP)
+        print("Accepted blocks: " +str(BestOffers) + ", " + str(bin(BestOffers))[2:].zfill(len(self.BidCollection.BlockOffers)))
+
+
+        result = [BestOffers,MaxSurplus,BestMCP]
         send_end.send(result)
 
     def CalculateSurplus(self,MCP,Blocks,offersaccepted):
@@ -203,32 +222,43 @@ class MarketClearing:
 
     def SetConsumerSurplusRange(self):
 
+
+        #work on this, make sure calculation of Consumer surplus is correct
         self.CSStart = []
         self.CSEnd = []
         self.CSLength = []
+        self.CSMarginal = []
+        self.CS = []
+
 
         for p in range(0, self.Hours):
 
             self.CSStart.append([])
             self.CSEnd.append([])
             self.CSLength.append([])
+            self.CSMarginal.append([])
+            self.CS.append([])
 
             i = self.MaxPrice
 
             while (i > self.MinPrice):
 
                 tmpVol = self.BidCurve[i][p]
-                self.CSEnd[p].append(i)
+                self.CSStart[p].append(i)
 
                 while (i > self.MinPrice and self.BidCurve[i][p] == tmpVol):
                     i -= 1
 
-                self.CSStart[p].append(i)
+                totVol = self.OfferCurve[i][p] - tmpVol
+                self.CSEnd[p].append(i-1)
                 self.CSLength[p].append(self.CSEnd[p][-1] - self.CSStart[p][-1])
+                self.CSMarginal[p].append(self.CSLength[p][-1]*totVol)
+                self.CS[p].append(self.CSLength[p][-1]*totVol)
+                for j in range(0, len(self.CSMarginal[p])-1):
+                    self.CS[p][-1] += self.CSMarginal[p][j]
 
 
         print("Made CS Range")
-
 
     def FindMCP(self,inBidOfferCurve):
 
