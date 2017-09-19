@@ -38,6 +38,8 @@ class MarketClearing:
         st = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')
 
         threads = multiprocessing.cpu_count()
+        #threads = 1
+
         logevery = 100000
         combis = 2 ** len(self.BidCollection.BlockOffers)
 
@@ -69,8 +71,10 @@ class MarketClearing:
 
             print("Calculated Optimum")
             #get the optimals from each process
+
         else:
-            self.MaximiseSurplusProcess(0, combis, len(self.BidCollection.BlockOffers),0, logevery)
+            recv_end, send_end = multiprocessing.Pipe(False)
+            result_list = self.MaximiseSurplusProcess(0, combis, len(self.BidCollection.BlockOffers),0, logevery,send_end)
 
         ts2 = time.time()
         et = datetime.datetime.fromtimestamp(ts2-ts).strftime('%Y-%m-%d %H:%M:%S')
@@ -96,12 +100,12 @@ class MarketClearing:
 
             MCP = self.FindMCP(BidOfferCurve)
 
-            Surplus = self.CalculateSurplus(MCP,BlocksAccepted)
-            TotSurplus = sum(Surplus)
+            Surplus = self.CalculateSurplus(MCP,BlocksAccepted,offersaccepted)
+            #TotSurplus = sum(Surplus)
 
-            if(TotSurplus>MaxSurplus):
+            if(Surplus>MaxSurplus):
 
-                MaxSurplus = TotSurplus
+                MaxSurplus = Surplus
                 BestOffers = i
                 BestMCP = copy.deepcopy(MCP)
 
@@ -114,11 +118,13 @@ class MarketClearing:
         result = [i,BestMCP]
         send_end.send(result)
 
-    def CalculateSurplus(self,MCP,Blocks):
+    def CalculateSurplus(self,MCP,Blocks,offersaccepted):
 
-        surplus2 = []
+        #surplus2 = []
         # the additional consumer surplus on the left
-        surplus = Blocks * MCP
+        #scratch that theres no surplus on the left because its pay as bid
+        #surplus = Blocks * MCP
+        surplus = np.zeros(MCP.shape)
 
         #And add each PS below
         for h in range(0, self.Hours):
@@ -132,11 +138,17 @@ class MarketClearing:
             surplus[h] += self.PS[h][i-1]
 
             #surplus2.append() = list(map(sum, self.PS))
-
+        surplus = sum(surplus)
+        NegSurplus=0
         #now for each block, the difference between the settled price and the block price, multiplied by the volume
+        for i in range(len(offersaccepted)):
+            if(offersaccepted[i]):
+                #sumproduct of volume and mcp vs sumproduct of block price
+                MarketValue = self.BidCollection.BlockOffers[i].Volume * MCP
+                BlockValue = self.BidCollection.BlockOffers[i].Volume * self.BidCollection.BlockOffers[i].Price
+                NegSurplus += sum(MarketValue-BlockValue)
 
-
-        return surplus
+        return surplus + NegSurplus
 
     def ShiftOffers(self,inBlocksAccepted):
 
